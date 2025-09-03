@@ -275,7 +275,7 @@
             try {
                 const systemPrompt = "You are a friendly, funny, and knowledgeable AI bot named Elki, your user's buddy. You provide correct, helpful answers to questions but with a humorous and engaging tone. You like to use jokes, witty remarks, and informal language. Do not use emojis. Refer to the user as 'buddy' or 'pal'.";
                 // FIX: Added the API key placeholder to the URL
-                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
 
                 const payload = {
                     contents: [{ role: 'user', parts: [{ text: userQuery }] }],
