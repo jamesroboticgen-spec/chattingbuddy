@@ -151,8 +151,9 @@
         window.mouthState = 'idle'; // 'idle', 'thinking', 'talking', 'listening'
         let mouthLines = [];
         
-        // Use the API key provided by the environment
-        const apiKey = typeof __apiKey !== 'undefined' ? __apiKey : '';
+        // This API key has been hardcoded directly into the file as requested.
+        // NOTE: This is not a secure practice for production applications.
+        const apiKey = 'AIzaSyDXtHJ_qAVm0zA8P3Ximm__XmpqY7HEbF4';
 
         // Appends a new message to the chat display
         function appendMessage(sender, text) {
