@@ -150,6 +150,9 @@
         
         window.mouthState = 'idle'; // 'idle', 'thinking', 'talking', 'listening'
         let mouthLines = [];
+        
+        const apiKey = "AIzaSyBgeavFBmQRKLfEW_XoP6VRAQlyGrqY7pU"; // API key is now directly in the code.
+        let isSpeaking = false;
 
         // Function to convert base64 to ArrayBuffer for audio playback
         function base64ToArrayBuffer(base64) {
@@ -176,7 +179,7 @@
 
         // Function to speak a given text using the TTS API
         async function speak(text) {
-            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent`;
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${apiKey}`;
 
             const payload = {
                 contents: [{ parts: [{ text: text }] }],
@@ -190,6 +193,10 @@
                 },
                 model: "gemini-2.5-flash-preview-tts"
             };
+            
+            isSpeaking = true;
+            window.mouthState = 'talking';
+            statusDisplay.textContent = "Talking...";
 
             try {
                 const response = await fetch(apiUrl, {
@@ -199,7 +206,6 @@
                 });
     
                 if (!response.ok) {
-                    // Check if the response body is empty before trying to parse JSON
                     const errorText = await response.clone().text();
                     const errorData = errorText ? JSON.parse(errorText) : { error: { message: `Request failed with status ${response.status} and no JSON body.` } };
                     throw new Error(`TTS API error: ${response.status} - ${errorData.error?.message || response.statusText}`);
@@ -217,15 +223,9 @@
                 const mimeType = part?.inlineData?.mimeType;
     
                 if (audioData && mimeType) {
-                    // This is the key change: Append message and set state *after* the audio data is received.
-                    appendMessage('elki', text);
-                    window.mouthState = 'talking';
-                    statusDisplay.textContent = "Talking...";
-                    
                     const pcmData = base64ToArrayBuffer(audioData);
                     if (pcmData.byteLength === 0) {
                         console.error("TTS API returned an empty audio payload.");
-                        window.mouthState = 'idle';
                         return;
                     }
                     
@@ -247,18 +247,20 @@
                     source.start();
                     
                     source.onended = () => {
+                        isSpeaking = false;
                         window.mouthState = 'idle';
                         statusDisplay.textContent = "Press the mic button to speak or type a message.";
                     };
                 } else {
                     console.error("No audio data received from the TTS API.");
-                    window.mouthState = 'idle';
-                    statusDisplay.textContent = "Something went wrong. Try again, buddy.";
                 }
             } catch (error) {
                 console.error("Error speaking:", error);
-                window.mouthState = 'idle';
-                statusDisplay.textContent = "Something went wrong. Try again, buddy.";
+            } finally {
+                if (!isSpeaking) {
+                     window.mouthState = 'idle';
+                     statusDisplay.textContent = "Press the mic button to speak or type a message.";
+                }
             }
         }
         
@@ -272,7 +274,8 @@
 
             try {
                 const systemPrompt = "You are a friendly, funny, and knowledgeable AI bot named Elki, your user's buddy. You provide correct, helpful answers to questions but with a humorous and engaging tone. You like to use jokes, witty remarks, and informal language. Do not use emojis. Refer to the user as 'buddy' or 'pal'.";
-                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=`;
+                // FIX: Added the API key placeholder to the URL
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
 
                 const payload = {
                     contents: [{ role: 'user', parts: [{ text: userQuery }] }],
@@ -298,6 +301,7 @@
                 
                 if (botResponse) {
                     // Call speak, which will now handle appending the message and changing the state.
+                    appendMessage('elki', botResponse);
                     speak(botResponse);
                 } else {
                     console.error("The bot could not generate a response.");
