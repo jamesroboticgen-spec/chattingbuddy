@@ -151,7 +151,8 @@
         window.mouthState = 'idle'; // 'idle', 'thinking', 'talking', 'listening'
         let mouthLines = [];
         
-        const apiKey = "AIzaSyBgeavFBmQRKLfEW_XoP6VRAQlyGrqY7pU"; // API key is now directly in the code.
+        // Use the API key provided by the environment
+        const apiKey = typeof __apiKey !== 'undefined' ? __apiKey : '';
         let isSpeaking = false;
 
         // Function to convert base64 to ArrayBuffer for audio playback
@@ -271,10 +272,15 @@
             appendMessage('user', userQuery);
             window.mouthState = 'thinking';
             statusDisplay.textContent = "Thinking...";
+            if (!apiKey) {
+                appendMessage('elki', "Sorry buddy, I can't connect to my brain. It seems like my API key is missing!");
+                window.mouthState = 'idle';
+                statusDisplay.textContent = "Press the mic button to speak or type a message.";
+                return;
+            }
 
             try {
                 const systemPrompt = "You are a friendly, funny, and knowledgeable AI bot named Elki, your user's buddy. You provide correct, helpful answers to questions but with a humorous and engaging tone. You like to use jokes, witty remarks, and informal language. Do not use emojis. Refer to the user as 'buddy' or 'pal'.";
-                // FIX: Added the API key placeholder to the URL
                 const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
 
                 const payload = {
