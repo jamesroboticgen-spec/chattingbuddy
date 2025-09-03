@@ -153,18 +153,6 @@
         
         // Use the API key provided by the environment
         const apiKey = typeof __apiKey !== 'undefined' ? __apiKey : '';
-        let isSpeaking = false;
-
-        // Function to convert base64 to ArrayBuffer for audio playback
-        function base64ToArrayBuffer(base64) {
-            const binary_string = window.atob(base64);
-            const len = binary_string.length;
-            const bytes = new Uint8Array(len);
-            for (let i = 0; i < len; i++) {
-                bytes[i] = binary_string.charCodeAt(i);
-            }
-            return bytes.buffer;
-        }
 
         // Appends a new message to the chat display
         function appendMessage(sender, text) {
@@ -177,96 +165,9 @@
             chatDisplay.appendChild(messageDiv);
             chatDisplay.scrollTop = chatDisplay.scrollHeight;
         }
-
-        // Function to speak a given text using the TTS API
-        async function speak(text) {
-            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${apiKey}`;
-
-            const payload = {
-                contents: [{ parts: [{ text: text }] }],
-                generationConfig: {
-                    responseModalities: ["AUDIO"],
-                    speechConfig: {
-                        voiceConfig: {
-                            prebuiltVoiceConfig: { voiceName: "Sadachbia" }
-                        }
-                    }
-                },
-                model: "gemini-2.5-flash-preview-tts"
-            };
-            
-            isSpeaking = true;
-            window.mouthState = 'talking';
-            statusDisplay.textContent = "Talking...";
-
-            try {
-                const response = await fetch(apiUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-    
-                if (!response.ok) {
-                    const errorText = await response.clone().text();
-                    const errorData = errorText ? JSON.parse(errorText) : { error: { message: `Request failed with status ${response.status} and no JSON body.` } };
-                    throw new Error(`TTS API error: ${response.status} - ${errorData.error?.message || response.statusText}`);
-                }
-    
-                const result = await response.json();
-                
-                // Check for a valid result object before continuing
-                if (!result || !result.candidates || result.candidates.length === 0) {
-                     throw new Error("Invalid or empty response from TTS API.");
-                }
-
-                const part = result?.candidates?.[0]?.content?.parts?.[0];
-                const audioData = part?.inlineData?.data;
-                const mimeType = part?.inlineData?.mimeType;
-    
-                if (audioData && mimeType) {
-                    const pcmData = base64ToArrayBuffer(audioData);
-                    if (pcmData.byteLength === 0) {
-                        console.error("TTS API returned an empty audio payload.");
-                        return;
-                    }
-                    
-                    const sampleRateMatch = mimeType.match(/rate=(\d+)/);
-                    const sampleRate = sampleRateMatch ? parseInt(sampleRateMatch[1], 10) : 16000;
-                    
-                    const audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate });
-                    const audioBuffer = audioContext.createBuffer(1, pcmData.byteLength / 2, sampleRate);
-                    const pcm16 = new Int16Array(pcmData);
-                    const nowBuffering = audioBuffer.getChannelData(0);
-    
-                    for (let i = 0; i < pcm16.length; i++) {
-                        nowBuffering[i] = pcm16[i] / 32768;
-                    }
-    
-                    const source = audioContext.createBufferSource();
-                    source.buffer = audioBuffer;
-                    source.connect(audioContext.destination);
-                    source.start();
-                    
-                    source.onended = () => {
-                        isSpeaking = false;
-                        window.mouthState = 'idle';
-                        statusDisplay.textContent = "Press the mic button to speak or type a message.";
-                    };
-                } else {
-                    console.error("No audio data received from the TTS API.");
-                }
-            } catch (error) {
-                console.error("Error speaking:", error);
-            } finally {
-                if (!isSpeaking) {
-                     window.mouthState = 'idle';
-                     statusDisplay.textContent = "Press the mic button to speak or type a message.";
-                }
-            }
-        }
         
-        // Function to generate a bot response and then speak it
-        async function generateAndSpeak(userQuery) {
+        // Function to generate a bot response
+        async function generateResponse(userQuery) {
             if (!userQuery.trim()) return;
 
             appendMessage('user', userQuery);
@@ -298,10 +199,10 @@
                 });
                 
                 if (!response.ok) {
-                    const errorData = await response.json().catch(() => ({}));
+                    const errorText = await response.clone().text();
+                    const errorData = errorText ? JSON.parse(errorText) : { error: { message: `Request failed with status ${response.status} and no JSON body.` } };
                     console.error('API Error:', errorData);
 
-                    const errorMessage = `API Error: ${response.status} - ${errorData.error?.message || response.statusText}`;
                     appendMessage('elki', `Whoops! Looks like I hit a glitch, buddy. My brain's not connecting. The console might have more info for you!`);
                     
                     window.mouthState = 'idle';
@@ -313,19 +214,15 @@
                 const botResponse = result?.candidates?.[0]?.content?.parts?.[0]?.text;
                 
                 if (botResponse) {
-                    // Call speak, which will now handle appending the message and changing the state.
                     appendMessage('elki', botResponse);
-                    speak(botResponse);
                 } else {
                     console.error("The bot could not generate a response.");
                     appendMessage('elki', "Whoops! Looks like I hit a glitch. Try asking me that again, buddy!");
-                    window.mouthState = 'idle';
-                    statusDisplay.textContent = "Press the mic button to speak or type a message.";
                 }
-
             } catch (error) {
                 console.error("Error fetching bot response:", error);
                 appendMessage('elki', "Whoops! Looks like I hit a glitch. Try asking me that again, buddy!");
+            } finally {
                 window.mouthState = 'idle';
                 statusDisplay.textContent = "Press the mic button to speak or type a message.";
             }
@@ -335,7 +232,7 @@
         sendBtn.addEventListener('click', () => {
             const query = userInput.value;
             if (query.trim() !== '') {
-                generateAndSpeak(query);
+                generateResponse(query);
                 userInput.value = '';
             }
         });
@@ -381,7 +278,7 @@
                 .join('');
             
             console.log("Heard:", transcript);
-            generateAndSpeak(transcript);
+            generateResponse(transcript);
         };
 
         recognition.onerror = (event) => {
