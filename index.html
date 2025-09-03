@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Elki - Your Chatting Buddy</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 1rem;
+            color: #f3f4f6;
+            overflow: hidden;
+        }
+        .container {
+            width: 100%;
+            height: 95vh;
+            max-width: 600px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            align-items: center;
+            background-color: #111827;
+            border-radius: 1.5rem;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+            padding: 1rem;
+        }
+        .canvas-container {
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        canvas {
+            background-color: transparent;
+            width: 100%;
+            height: 250px;
+        }
+        .chat-container {
+            flex-grow: 1;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            margin-top: 1rem;
+            padding: 0.5rem;
+            border-radius: 0.75rem;
+            background-color: #1f2937;
+        }
+        .message-box {
+            display: flex;
+            flex-direction: column;
+            margin-bottom: 0.5rem;
+        }
+        .user-message {
+            background-color: #374151;
+            align-self: flex-end;
+            border-radius: 1rem 1rem 0 1rem;
+            padding: 0.5rem 1rem;
+            margin-left: auto;
+        }
+        .elki-message {
+            background-color: #2563eb;
+            align-self: flex-start;
+            border-radius: 1rem 1rem 1rem 0;
+            padding: 0.5rem 1rem;
+            margin-right: auto;
+        }
+        .input-area {
+            display: flex;
+            width: 100%;
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+        #status-display {
+            width: 100%;
+            text-align: center;
+            padding: 0.75rem 1.5rem;
+            border-radius: 9999px;
+            background-color: #374151;
+            color: #9ca3af;
+            font-style: italic;
+        }
+        .fade-in {
+            animation: fadeIn 0.5s ease-in-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="bg-black flex items-center justify-center min-h-screen text-gray-100">
+
+<div class="container">
+    <h2 class="text-center text-4xl font-bold mb-4 text-blue-400">Elki</h2>
+
+    <!-- Bot Face Canvas -->
+    <div class="canvas-container">
+        <canvas id="bot-canvas"></canvas>
+    </div>
+
+    <!-- Chat Display -->
+    <div id="chat-display" class="chat-container">
+        <div class="message-box elki-message fade-in">
+            <p>Hey there, buddy! I'm ready to chat. You can type or click the microphone button to talk to me!</p>
+        </div>
+    </div>
+
+    <!-- Input Area -->
+    <div id="input-container" class="w-full">
+        <div class="input-area">
+            <input type="text" id="user-input" placeholder="Type a message..." class="flex-grow p-3 rounded-xl bg-gray-700 text-gray-100 border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <button id="mic-btn" class="p-3 bg-blue-600 text-white rounded-xl shadow-lg transition-transform transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-14 0v-1h14v1zM12 19v-4m-4 4h8a4 4 0 004-4V7a4 4 0 00-4-4H8a4 4 0 00-4 4v8a4 4 0 004 4h8z"/>
+                </svg>
+            </button>
+            <button id="send-btn" class="p-3 bg-blue-600 text-white rounded-xl shadow-lg transition-transform transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                Send
+            </button>
+        </div>
+        <!-- Status Display -->
+        <div id="status-display" class="mt-4">
+            Press the mic button to speak or type a message.
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const canvas = document.getElementById('bot-canvas');
+        const ctx = canvas.getContext('2d');
+        const chatDisplay = document.getElementById('chat-display');
+        const statusDisplay = document.getElementById('status-display');
+        const userInput = document.getElementById('user-input');
+        const sendBtn = document.getElementById('send-btn');
+        const micBtn = document.getElementById('mic-btn');
+
+        let mouseX = window.innerWidth / 2;
+        let mouseY = window.innerHeight / 2;
+        let botCenterX, botCenterY;
+        let eyeDistance;
+        let eyeWidth, eyeHeight;
+        
+        window.mouthState = 'idle'; // 'idle', 'thinking', 'talking', 'listening'
+        let mouthLines = [];
+
+        // Function to convert base64 to ArrayBuffer for audio playback
+        function base64ToArrayBuffer(base64) {
+            const binary_string = window.atob(base64);
+            const len = binary_string.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binary_string.charCodeAt(i);
+            }
+            return bytes.buffer;
+        }
+
+        // Appends a new message to the chat display
+        function appendMessage(sender, text) {
+            const messageDiv = document.createElement('div');
+            messageDiv.classList.add('message-box', 'fade-in');
+            const p = document.createElement('p');
+            p.textContent = text;
+            p.classList.add(sender === 'user' ? 'user-message' : 'elki-message');
+            messageDiv.appendChild(p);
+            chatDisplay.appendChild(messageDiv);
+            chatDisplay.scrollTop = chatDisplay.scrollHeight;
+        }
+
+        // Function to speak a given text using the TTS API
+        async function speak(text) {
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent`;
+
+            const payload = {
+                contents: [{ parts: [{ text: text }] }],
+                generationConfig: {
+                    responseModalities: ["AUDIO"],
+                    speechConfig: {
+                        voiceConfig: {
+                            prebuiltVoiceConfig: { voiceName: "Sadachbia" }
+                        }
+                    }
+                },
+                model: "gemini-2.5-flash-preview-tts"
+            };
+
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+    
+                if (!response.ok) {
+                    // Check if the response body is empty before trying to parse JSON
+                    const errorText = await response.clone().text();
+                    const errorData = errorText ? JSON.parse(errorText) : { error: { message: `Request failed with status ${response.status} and no JSON body.` } };
+                    throw new Error(`TTS API error: ${response.status} - ${errorData.error?.message || response.statusText}`);
+                }
+    
+                const result = await response.json();
+                
+                // Check for a valid result object before continuing
+                if (!result || !result.candidates || result.candidates.length === 0) {
+                     throw new Error("Invalid or empty response from TTS API.");
+                }
+
+                const part = result?.candidates?.[0]?.content?.parts?.[0];
+                const audioData = part?.inlineData?.data;
+                const mimeType = part?.inlineData?.mimeType;
+    
+                if (audioData && mimeType) {
+                    // This is the key change: Append message and set state *after* the audio data is received.
+                    appendMessage('elki', text);
+                    window.mouthState = 'talking';
+                    statusDisplay.textContent = "Talking...";
+                    
+                    const pcmData = base64ToArrayBuffer(audioData);
+                    if (pcmData.byteLength === 0) {
+                        console.error("TTS API returned an empty audio payload.");
+                        window.mouthState = 'idle';
+                        return;
+                    }
+                    
+                    const sampleRateMatch = mimeType.match(/rate=(\d+)/);
+                    const sampleRate = sampleRateMatch ? parseInt(sampleRateMatch[1], 10) : 16000;
+                    
+                    const audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate });
+                    const audioBuffer = audioContext.createBuffer(1, pcmData.byteLength / 2, sampleRate);
+                    const pcm16 = new Int16Array(pcmData);
+                    const nowBuffering = audioBuffer.getChannelData(0);
+    
+                    for (let i = 0; i < pcm16.length; i++) {
+                        nowBuffering[i] = pcm16[i] / 32768;
+                    }
+    
+                    const source = audioContext.createBufferSource();
+                    source.buffer = audioBuffer;
+                    source.connect(audioContext.destination);
+                    source.start();
+                    
+                    source.onended = () => {
+                        window.mouthState = 'idle';
+                        statusDisplay.textContent = "Press the mic button to speak or type a message.";
+                    };
+                } else {
+                    console.error("No audio data received from the TTS API.");
+                    window.mouthState = 'idle';
+                    statusDisplay.textContent = "Something went wrong. Try again, buddy.";
+                }
+            } catch (error) {
+                console.error("Error speaking:", error);
+                window.mouthState = 'idle';
+                statusDisplay.textContent = "Something went wrong. Try again, buddy.";
+            }
+        }
+        
+        // Function to generate a bot response and then speak it
+        async function generateAndSpeak(userQuery) {
+            if (!userQuery.trim()) return;
+
+            appendMessage('user', userQuery);
+            window.mouthState = 'thinking';
+            statusDisplay.textContent = "Thinking...";
+
+            try {
+                const systemPrompt = "You are a friendly, funny, and knowledgeable AI bot named Elki, your user's buddy. You provide correct, helpful answers to questions but with a humorous and engaging tone. You like to use jokes, witty remarks, and informal language. Do not use emojis. Refer to the user as 'buddy' or 'pal'.";
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=`;
+
+                const payload = {
+                    contents: [{ role: 'user', parts: [{ text: userQuery }] }],
+                    tools: [{ "google_search": {} }],
+                    systemInstruction: {
+                        parts: [{ text: systemPrompt }]
+                    },
+                };
+
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(`API error: ${response.status} - ${errorData.error?.message || response.statusText}`);
+                }
+
+                const result = await response.json();
+                const botResponse = result?.candidates?.[0]?.content?.parts?.[0]?.text;
+                
+                if (botResponse) {
+                    // Call speak, which will now handle appending the message and changing the state.
+                    speak(botResponse);
+                } else {
+                    console.error("The bot could not generate a response.");
+                    appendMessage('elki', "Whoops! Looks like I hit a glitch. Try asking me that again, buddy!");
+                    window.mouthState = 'idle';
+                    statusDisplay.textContent = "Press the mic button to speak or type a message.";
+                }
+
+            } catch (error) {
+                console.error("Error fetching bot response:", error);
+                appendMessage('elki', "Whoops! Looks like I hit a glitch. Try asking me that again, buddy!");
+                window.mouthState = 'idle';
+                statusDisplay.textContent = "Press the mic button to speak or type a message.";
+            }
+        };
+
+        // Event listener for the Send button
+        sendBtn.addEventListener('click', () => {
+            const query = userInput.value;
+            if (query.trim() !== '') {
+                generateAndSpeak(query);
+                userInput.value = '';
+            }
+        });
+
+        // Event listener for the Enter key on the input field
+        userInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendBtn.click();
+            }
+        });
+
+        // Speech recognition setup
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRecognition) {
+            statusDisplay.textContent = "Speech recognition is not supported in this browser. Please use Chrome or Edge.";
+            console.error("Speech Recognition not supported.");
+            return;
+        }
+
+        const recognition = new SpeechRecognition();
+        recognition.continuous = false;
+        recognition.interimResults = false;
+        recognition.lang = 'en-US';
+
+        let isListening = false;
+
+        recognition.onstart = () => {
+            isListening = true;
+            window.mouthState = 'listening';
+            statusDisplay.textContent = "Listening...";
+        };
+
+        recognition.onend = () => {
+            isListening = false;
+            window.mouthState = 'idle';
+            statusDisplay.textContent = "Press the mic button to speak or type a message.";
+        };
+
+        // Process the result
+        recognition.onresult = (event) => {
+            const transcript = Array.from(event.results)
+                .map(result => result[0].transcript)
+                .join('');
+            
+            console.log("Heard:", transcript);
+            generateAndSpeak(transcript);
+        };
+
+        recognition.onerror = (event) => {
+            console.error('Speech recognition error:', event.error);
+            isListening = false;
+            window.mouthState = 'idle';
+
+            if (event.error === 'not-allowed') {
+                 statusDisplay.textContent = "Permission to use the microphone was denied. Please allow microphone access in your browser settings.";
+            } else {
+                 statusDisplay.textContent = "Something went wrong. Please try again.";
+            }
+        };
+
+        // Event listener for the microphone button
+        micBtn.addEventListener('click', () => {
+            if (!isListening) {
+                recognition.start();
+            } else {
+                recognition.stop();
+            }
+        });
+
+        // Canvas drawing functions
+        function resizeCanvas() {
+            canvas.width = canvas.parentElement.clientWidth;
+            canvas.height = canvas.parentElement.clientHeight;
+            botCenterX = canvas.width / 2;
+            botCenterY = canvas.height / 2;
+            eyeWidth = Math.min(canvas.width, canvas.height) * 0.15;
+            eyeHeight = Math.min(canvas.width, canvas.height) * 0.05;
+            eyeDistance = Math.min(canvas.width, canvas.height) * 0.2;
+
+            const numLines = 5;
+            const lineSpacing = Math.min(canvas.width, canvas.height) * 0.02;
+            mouthLines = Array.from({ length: numLines }, (_, i) => ({
+                y: botCenterY + Math.min(canvas.width, canvas.height) * 0.2 + (i - Math.floor(numLines / 2)) * lineSpacing,
+                width: Math.min(canvas.width, canvas.height) * 0.2,
+                baseWidth: Math.min(canvas.width, canvas.height) * 0.2,
+                speed: Math.random() * 0.05 + 0.01
+            }));
+
+            drawFace();
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        function drawFace() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.shadowBlur = 20;
+            ctx.shadowColor = '#0ea5e9';
+            
+            // Eye drawing logic - back to the classic style
+            const dx = mouseX - botCenterX;
+            const dy = mouseY - botCenterY;
+            const gazeFactor = 0.05;
+            const maxGazeOffset = Math.min(canvas.width, canvas.height) * 0.03;
+            const gazeOffsetX = Math.min(Math.max(dx * gazeFactor, -maxGazeOffset), maxGazeOffset);
+            const gazeOffsetY = Math.min(Math.max(dy * gazeFactor, -maxGazeOffset), maxGazeOffset);
+
+            // Left eye
+            ctx.beginPath();
+            ctx.moveTo(botCenterX - eyeDistance - eyeWidth / 2 + gazeOffsetX, botCenterY - eyeHeight / 2 + gazeOffsetY);
+            ctx.lineTo(botCenterX - eyeDistance + eyeWidth / 2 + gazeOffsetX, botCenterY - eyeHeight / 2 + gazeOffsetY);
+            ctx.lineTo(botCenterX - eyeDistance + gazeOffsetX, botCenterY + eyeHeight / 2 + gazeOffsetY);
+            ctx.closePath();
+            ctx.fillStyle = '#0ea5e9';
+            ctx.fill();
+            
+            // Right eye
+            ctx.beginPath();
+            ctx.moveTo(botCenterX + eyeDistance - eyeWidth / 2 + gazeOffsetX, botCenterY - eyeHeight / 2 + gazeOffsetY);
+            ctx.lineTo(botCenterX + eyeDistance + eyeWidth / 2 + gazeOffsetX, botCenterY - eyeHeight / 2 + gazeOffsetY);
+            ctx.lineTo(botCenterX + eyeDistance + gazeOffsetX, botCenterY + eyeHeight / 2 + gazeOffsetY);
+            ctx.closePath();
+            ctx.fillStyle = '#0ea5e9';
+            ctx.fill();
+
+            // Mouth drawing logic
+            if (window.mouthState === 'idle') {
+                mouthLines.forEach(line => {
+                    ctx.beginPath();
+                    ctx.moveTo(botCenterX - line.baseWidth / 2, line.y);
+                    ctx.lineTo(botCenterX + line.baseWidth / 2, line.y);
+                    ctx.strokeStyle = '#0ea5e9';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                });
+            } else if (window.mouthState === 'listening') {
+                const sineWaveOffset = Math.sin(Date.now() * 0.005) * 5;
+                mouthLines.forEach(line => {
+                    ctx.beginPath();
+                    ctx.moveTo(botCenterX - line.baseWidth / 2, line.y + sineWaveOffset);
+                    ctx.lineTo(botCenterX + line.baseWidth / 2, line.y + sineWaveOffset);
+                    ctx.strokeStyle = '#0ea5e9';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                });
+            } else if (window.mouthState === 'thinking') {
+                mouthLines.forEach((line, i) => {
+                    const wave = Math.sin(Date.now() * 0.005 + i) * 0.5 + 0.5;
+                    line.width = line.baseWidth * wave;
+                    ctx.beginPath();
+                    ctx.moveTo(botCenterX - line.width / 2, line.y);
+                    ctx.lineTo(botCenterX + line.width / 2, line.y);
+                    ctx.strokeStyle = '#0ea5e9';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                });
+            } else if (window.mouthState === 'talking') {
+                mouthLines.forEach((line, i) => {
+                    const wave = Math.sin(Date.now() * 0.02 + i) * 0.8 + 0.2;
+                    line.width = line.baseWidth * (0.5 + wave * 0.5);
+                    ctx.beginPath();
+                    ctx.moveTo(botCenterX - line.width / 2, line.y);
+                    ctx.lineTo(botCenterX + line.width / 2, line.y);
+                    ctx.strokeStyle = '#0ea5e9';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                });
+            }
+            
+            ctx.shadowBlur = 0;
+            ctx.shadowColor = 'transparent';
+        }
+        
+        function updateMousePosition(e) {
+            const rect = canvas.getBoundingClientRect();
+            mouseX = e.clientX - rect.left;
+            mouseY = e.clientY - rect.top;
+        }
+
+        canvas.addEventListener('mousemove', updateMousePosition);
+        canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            const touch = e.touches[0];
+            updateMousePosition(touch);
+        });
+
+        function animate() {
+            drawFace();
+            requestAnimationFrame(animate);
+        }
+        
+        animate();
+    });
+</script>
+</body>
+</html>
