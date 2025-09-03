@@ -298,8 +298,15 @@
                 });
                 
                 if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(`API error: ${response.status} - ${errorData.error?.message || response.statusText}`);
+                    const errorData = await response.json().catch(() => ({}));
+                    console.error('API Error:', errorData);
+
+                    const errorMessage = `API Error: ${response.status} - ${errorData.error?.message || response.statusText}`;
+                    appendMessage('elki', `Whoops! Looks like I hit a glitch, buddy. My brain's not connecting. The console might have more info for you!`);
+                    
+                    window.mouthState = 'idle';
+                    statusDisplay.textContent = "Press the mic button to speak or type a message.";
+                    return;
                 }
 
                 const result = await response.json();
