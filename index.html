@@ -153,7 +153,7 @@
         
         // This API key has been hardcoded directly into the file as requested.
         // NOTE: This is not a secure practice for production applications.
-        const apiKey = 'AIzaSyDXtHJ_qAVm0zA8P3Ximm__XmpqY7HEbF4';
+        const apiKey = 'AIzaSyCAX_DxJ7rcHi2ZOE0tR_zZ-6BBi_zqKIU';
 
         // Appends a new message to the chat display
         function appendMessage(sender, text) {
@@ -174,8 +174,8 @@
             appendMessage('user', userQuery);
             window.mouthState = 'thinking';
             statusDisplay.textContent = "Thinking...";
-            if (!apiKey) {
-                appendMessage('elki', "Sorry buddy, I can't connect to my brain. It seems like my API key is missing!");
+            if (!apiKey || apiKey === 'YOUR_NEW_API_KEY_HERE') {
+                appendMessage('elki', "Sorry buddy, I can't connect to my brain. It seems like my API key is missing or invalid!");
                 window.mouthState = 'idle';
                 statusDisplay.textContent = "Press the mic button to speak or type a message.";
                 return;
